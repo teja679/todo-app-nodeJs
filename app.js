@@ -5,8 +5,12 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const session = require("express-session");
 const mongoDBSession = require("connect-mongoDB-session")(session);
-const { cleanUpAndValidate } = require("./Utils/AuthUtils");
 const UserSchema = require("./UserSchema");
+
+// models
+const TodoModel = require("./models/TodoModel");
+
+const { cleanUpAndValidate } = require("./Utils/AuthUtils");
 const isAuth = require("./middleware/isAuth");
 
 app.set("view engine", "ejs");
@@ -25,8 +29,10 @@ mongoose
     console.log(err);
   });
 
+//middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static("public"));
 
 const store = new mongoDBSession({
   uri: mongoURI,
@@ -180,10 +186,117 @@ app.post("/login", async (req, res) => {
   res.redirect("/dashboard");
 });
 
-app.get("/dashboard", (req, res) => {
-  res.render("dashboard");
+app.get("/dashboard", async (req, res) => {
+  let todos = [];
+  try {
+    todos = await TodoModel.find({ username: req.session.user.username });
+    console.log("todos", todos);
+  } catch (err) {
+    return res.send({
+      status: 400,
+      message: "user not found",
+    });
+  }
+
+  return res.render("dashboard", { todos: todos });
 });
 
+// --------------- EDIT ITEM ----------------------
+app.post("/edit-item", async (req, res) => {
+  const id = req.body.id;
+  const newData = req.body.newData;
+  console.log(id, newData);
+  if (!id || !newData) {
+    return res.send({
+      status: 400,
+      message: "Missing Parameters",
+      error: "Missing Parameters",
+    });
+  }
+
+  try {
+    const todoDb = await TodoModel.findOneAndUpdate(
+      { _id: id },
+      { todo: newData }
+    );
+    return res.send({
+      status: 200,
+      message: "updated todo data successfully",
+      data: todoDb,
+    });
+  } catch (err) {
+    return res.send({
+      status: 400,
+      message: "Database error, Please try again",
+      error: err,
+    });
+  }
+});
+
+// --------------- DELETE ITEM ----------------------
+app.post("/delete-item", async (req, res) => {
+  const id = req.body.id;
+
+  if (!id) {
+    return res.send({
+      status: 400,
+      message: "Missing Parameters",
+      error: "Missing Parameters",
+    });
+  }
+  try {
+    const todoDb = await TodoModel.findByIdAndDelete({ _id: id });
+    return res.send({
+      status: 200,
+      message: "Todo deleted successfully",
+      data: todoDb,
+    });
+  } catch (err) {
+    return res.send({
+      status: 400,
+      message: "Database error, Please try again",
+      error: err,
+    });
+  }
+});
+
+// --------------- CREATE-ITEM----------------------
+app.post("/create-item", async (req, res) => {
+  console.log(req.body);
+  const todoText = req.body.todo;
+  if (!todoText) {
+    return res.send({
+      status: 400,
+      message: "Missing parameters",
+    });
+  }
+
+  if (todoText.length > 100) {
+    return res.send({
+      status: 401,
+      message: "todo text is very long. Max 100 characters allowed.",
+    });
+  }
+  let todo = new TodoModel({
+    todo: todoText,
+    username: req.session.user.username,
+  });
+
+  try {
+    const todoDb = await todo.save();
+
+    return res.send({
+      status: 200,
+      message: "todo created successfully",
+      data: todoDb,
+    });
+  } catch (err) {
+    return res.send({
+      status: 400,
+      message: "database error",
+    });
+  }
+});
 app.get("/home", (req, res) => {
   if (req.session.isAuth) {
     res.send("This is your Home page, Logged in successfully");
@@ -192,44 +305,44 @@ app.get("/home", (req, res) => {
   }
 });
 
-app.post('/logout', (req, res) => {
-  console.log(req.session)
-  console.log(req.session.id)
+app.post("/logout", async (req, res) => {
+  console.log(req.session);
+  console.log(req.session.id);
 
   req.session.destroy((err) => {
-    if(err) throw err;
+    if (err) throw err;
 
-    res.redirect('/')
-  })
-})
+    res.redirect("/");
+  });
+});
 
-app.post('/logout_from_all_devices', async (req, res) => {
-  console.log('here', req.session.user.username)
-  const username = req.session.user.username
+app.post("/logout_from_all_devices", async (req, res) => {
+  console.log("here", req.session.user.username);
+  const username = req.session.user.username;
 
-  const Schema = mongoose.Schema
+  const Schema = mongoose.Schema;
 
-  const sessionSchema = new Schema({ _id: String}, {strict: false})
-  const SessionModel = mongoose.model('sessions', sessionSchema)
+  const sessionSchema = new Schema({ _id: String }, { strict: false });
+  const SessionModel = mongoose.model("sessions", sessionSchema);
 
-  try{
+  try {
     const sessionDb = await SessionModel.deleteMany({
-      'session.user.username': username
-    })
-    console.log(sessionDb)
+      "session.user.username": username,
+    });
+    console.log(sessionDb);
 
     res.send({
       status: 200,
-      message: 'Logged out of all devices'
-    })
-  } catch(err) {
+      message: "Logged out of all devices",
+    });
+  } catch (err) {
     res.send({
       status: 400,
-      message: 'Logout failed',
-      error: err
-    })
+      message: "Logout failed",
+      error: err,
+    });
   }
-})
+});
 app.listen(4000, () => {
   console.log("Listening on port 4000");
 });
