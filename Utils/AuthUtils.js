@@ -23,4 +23,4 @@ const cleanUpAndValidate = ({ name, username, password, email }) => {
   });
 };
 
-module.exports = { cleanUpAndValidate };
+module.exports = { cleanUpAndValidate }

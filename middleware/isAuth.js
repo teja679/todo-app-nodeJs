@@ -4,7 +4,8 @@ const isAuth = (req, res, next) => {
   } else {
     res.send({
       status: 401,
-      message: "Invalid session , please try again",
+      message: "Invalid Session. Please log In",
     });
   }
 };
+module.exports = isAuth;
